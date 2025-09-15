@@ -1,0 +1,97 @@
+name: 'Deploy to Amazon EKS with Helm (Auto-Configured)'
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'frontend/**'
+      - 'docker/**'
+      - 'kubernetes/**'
+
+env:
+  AWS_REGION: MY_AWS_REGION           # TODO: update to your AWS region (e.g. us-east-1)
+  ECR_REPOSITORY: MY_ECR_REPOSITORY   # TODO: update to your ECR repo name
+  EKS_CLUSTER_NAME: MY_EKS_CLUSTER    # TODO: update to your EKS cluster name
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  IMAGE_TAG: ${{ github.sha }}
+  KUBECONFIG_FILE: kubeconfig-${{ github.run_id }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: 'Deploy with Helm'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Identify Changed Services
+        id: changed-services
+        run: |
+          CHANGED_SERVICES=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | uniq)
+          echo "changed_services=$CHANGED_SERVICES" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Changed Services
+        run: |
+          for SERVICE in ${{ steps.changed-services.outputs.changed_services }}; do
+            echo "🚀 Building and pushing $SERVICE..."
+            docker build --platform linux/amd64 \
+              -t ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}-$SERVICE \
+              -f services/$SERVICE/Dockerfile .
+            docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}-$SERVICE
+          done
+
+      - name: Set Up EKS Access
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }} \
+            --kubeconfig ${{ env.KUBECONFIG_FILE }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.2
+
+      - name: Auto-Create/Update Helm Charts
+        run: |
+          for SERVICE in ${{ steps.changed-services.outputs.changed_services }}; do
+            if [ ! -d "./charts/$SERVICE" ]; then
+              echo "📦 Creating Helm chart for $SERVICE..."
+              helm create ./charts/$SERVICE
+              # Inject rolling update strategy
+              sed -i '/^spec:/a \
+  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxUnavailable: 0\n      maxSurge: 1' ./charts/$SERVICE/templates/deployment.yaml
+            fi
+          done
+
+      - name: Deploy Changed Services
+        run: |
+          for SERVICE in ${{ steps.changed-services.outputs.changed_services }}; do
+            echo "🚀 Deploying $SERVICE..."
+            helm upgrade --install \
+              $SERVICE \
+              ./charts/$SERVICE \
+              --namespace default \
+              --set image.repository=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }} \
+              --set image.tag=${{ env.IMAGE_TAG }}-$SERVICE \
+              --atomic \
+              --wait
+          done
+        env:
+          KUBECONFIG: ${{ env.KUBECONFIG_FILE }}
