@@ -77,6 +77,46 @@ The front end is a React SPA, communicating with backend microservices through a
 
 ---
 
+### 3.5. Loan Service
+
+- **Description:** Manages loan applications, approvals, and repayments.
+- **Tech Stack:** Java Spring Boot, PostgreSQL
+- **API Endpoints:**  
+  - `POST /api/loans/apply`  
+  - `GET /api/loans/{loanId}`  
+  - `GET /api/loans/user/{userId}`  
+- **Kafka Topics:**  
+  - `loan-approved`  
+  - `loan-rejected`
+
+---
+
+### 3.6. Card Service
+
+- **Description:** Handles debit/credit card issuance, management, and transactions.
+- **Tech Stack:** Java Spring Boot, PostgreSQL
+- **API Endpoints:**  
+  - `POST /api/cards/issue`  
+  - `GET /api/cards/{cardId}`  
+  - `GET /api/cards/user/{userId}`  
+- **Kafka Topics:**  
+  - `card-issued`  
+  - `card-blocked`
+
+---
+
+### 3.7. Audit Service
+
+- **Description:** Logs critical operations and provides auditing for compliance.
+- **Tech Stack:** Java Spring Boot, PostgreSQL
+- **API Endpoints:**  
+  - `GET /api/audit/logs`  
+  - `GET /api/audit/logs/{userId}`  
+- **Kafka Subscriptions:**  
+  - Subscribes to `transaction-completed`, `account-created`, `loan-approved`, `card-issued`
+
+---
+
 ## 4. Technology Stack
 
 ### Backend
