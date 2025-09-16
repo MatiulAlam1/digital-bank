@@ -1,6 +1,6 @@
 # Digital Bank – Microservices Architecture
 
-This document outlines the architecture, technical stack, and deployment strategy for the **Digital Bank** project. The platform is designed using a microservice-based approach, with React on the frontend, Java Spring Boot backend services, Apache Kafka for asynchronous communication, PostgreSQL for data persistence, Redis for caching, and containerized with Docker and Kubernetes. Kustomize is used for environment-specific deployment.
+This document outlines the architecture, technical stack, and deployment strategy for a small-sized **Digital Bank** project. The platform is designed using a microservice-based approach, with React on the frontend, Java Spring Boot backend services, Apache Kafka for asynchronous communication, PostgreSQL for data persistence, Redis for caching, and containerized with Docker and Kubernetes. Kustomize is used for environment-specific deployment.
 
 ---
 
